@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Alert, Keyboard, Pressable, ScrollView, StyleSheet, Switch, TextInput, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -13,10 +14,91 @@ export default function HomeScreen() {
   const [ideaText, setIdeaText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category>('Random');
   const [isOutside, setIsOutside] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const { addIdea } = useIdeas();
   const insets = useSafeAreaInsets();
+  const dictationBaseRef = useRef<string>('');
 
   const canSubmit = ideaText.trim().length > 0;
+
+  // Speech recognition event listeners
+  useSpeechRecognitionEvent('start', () => {
+    setIsListening(true);
+  });
+
+  useSpeechRecognitionEvent('end', () => {
+    setIsListening(false);
+  });
+
+  useSpeechRecognitionEvent('result', (event) => {
+    const transcript = event.results?.[0]?.transcript;
+    if (transcript !== undefined) {
+      setIdeaText(dictationBaseRef.current + transcript);
+    }
+  });
+
+  useSpeechRecognitionEvent('error', (event) => {
+    setIsListening(false);
+    const errorMessage = event.error?.message || 'An error occurred during speech recognition.';
+    const hint = Platform.OS === 'ios' ? '\n\nMake sure Siri & Dictation is enabled in Settings.' : '';
+    Alert.alert('Dictation Error', errorMessage + hint);
+    ExpoSpeechRecognitionModule.stop().catch(() => {
+      // Ignore stop errors
+    });
+  });
+
+  const handleStartDictation = async () => {
+    if (Platform.OS === 'web') {
+      Alert.alert('Not Supported', 'Dictation is not supported on web yet.');
+      return;
+    }
+
+    try {
+      const isAvailable = ExpoSpeechRecognitionModule.isRecognitionAvailable();
+      if (!isAvailable) {
+        Alert.alert('Not Available', 'Speech recognition is not available on this device.');
+        return;
+      }
+
+      const { status } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Microphone permission is required for dictation.');
+        return;
+      }
+
+      // Store existing text as base for appending
+      const existingText = ideaText.trim();
+      dictationBaseRef.current = existingText ? existingText + ' ' : '';
+
+      await ExpoSpeechRecognitionModule.start({
+        lang: 'en-US',
+        interimResults: true,
+        continuous: true,
+        iosTaskHint: 'dictation',
+      });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to start dictation. Please try again.');
+      setIsListening(false);
+    }
+  };
+
+  const handleStopDictation = async () => {
+    try {
+      await ExpoSpeechRecognitionModule.stop();
+      setIsListening(false);
+    } catch (error) {
+      // Ignore stop errors, end event will handle state
+      setIsListening(false);
+    }
+  };
+
+  const handleDictationToggle = () => {
+    if (isListening) {
+      handleStopDictation();
+    } else {
+      handleStartDictation();
+    }
+  };
 
   const submitIdea = () => {
     if (!canSubmit) {
@@ -62,10 +144,12 @@ export default function HomeScreen() {
           />
           <Pressable
             style={({ pressed }) => [styles.recordButton, pressed && { opacity: 0.8 }]}
-            onPress={() => Alert.alert('Coming soon', 'Voice notes are not implemented yet.')}
+            onPress={handleDictationToggle}
             accessibilityRole="button"
-            accessibilityLabel="Record voice note">
-            <ThemedText style={styles.recordButtonText}>🎤 Record voice note</ThemedText>
+            accessibilityLabel={isListening ? 'Stop dictation' : 'Record voice note'}>
+            <ThemedText style={styles.recordButtonText}>
+              {isListening ? '⏹ Stop dictation' : '🎤 Record voice note'}
+            </ThemedText>
           </Pressable>
         </ThemedView>
 
