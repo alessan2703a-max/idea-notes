@@ -1,98 +1,333 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import { Alert, Keyboard, Pressable, ScrollView, StyleSheet, Switch, TextInput, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { useIdeas } from '@/context/ideas-context';
+import { useThemeColor } from '@/hooks/use-theme-color';
+
+type Category = 'App' | 'Content' | 'Random';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const [ideaText, setIdeaText] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<Category>('Random');
+  const [isOutside, setIsOutside] = useState(false);
+  const { addIdea } = useIdeas();
+  const insets = useSafeAreaInsets();
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const canSubmit = ideaText.trim().length > 0;
+
+  const submitIdea = () => {
+    if (!canSubmit) {
+      return;
+    }
+    const text = ideaText.trim();
+    addIdea({ text, category: selectedCategory, isOutside });
+    setIdeaText('');
+    setSelectedCategory('Random');
+    setIsOutside(false);
+    Keyboard.dismiss();
+  };
+
+  const inputTextColor = useThemeColor({ light: '#11181C', dark: '#ECEDEE' }, 'text');
+  const placeholderColor = useThemeColor({ light: '#687076', dark: '#9BA1A6' }, 'icon');
+  const cardBackground = useThemeColor({ light: '#fff', dark: '#1F1F1F' }, 'background');
+  const borderColor = useThemeColor({ light: '#E0E0E0', dark: '#404040' }, 'icon');
+
+  return (
+    <ThemedView style={styles.container}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: 20 + insets.top }]}>
+        {/* A) Header */}
+        <ThemedView style={styles.header}>
+          <ThemedView style={styles.badge}>
+            <ThemedText style={styles.badgeEmoji}>✨</ThemedText>
+          </ThemedView>
+          <ThemedView style={styles.headerText}>
+            <ThemedText type="title" style={styles.headerTitle}>Capture</ThemedText>
+            <ThemedText style={styles.headerSubtitle}>Turn your ideas into reality</ThemedText>
+          </ThemedView>
+        </ThemedView>
+
+        {/* B) Grote input-card */}
+        <ThemedView style={[styles.card, styles.inputCard, { backgroundColor: cardBackground, borderColor }]}>
+          <TextInput
+            style={[styles.textInput, { color: inputTextColor }]}
+            placeholder="What's on your mind?"
+            placeholderTextColor={placeholderColor}
+            multiline
+            textAlignVertical="top"
+            value={ideaText}
+            onChangeText={setIdeaText}
+          />
+          <Pressable
+            style={({ pressed }) => [styles.recordButton, pressed && { opacity: 0.8 }]}
+            onPress={() => Alert.alert('Coming soon', 'Voice notes are not implemented yet.')}
+            accessibilityRole="button"
+            accessibilityLabel="Record voice note">
+            <ThemedText style={styles.recordButtonText}>🎤 Record voice note</ThemedText>
+          </Pressable>
+        </ThemedView>
+
+        {/* C) Sectielabel */}
+        <ThemedText style={styles.sectionLabel}>CHOOSE A CATEGORY</ThemedText>
+
+        {/* D) Categorie-rij */}
+        <ThemedView style={styles.categoryRow}>
+          <Pressable
+            onPress={() => setSelectedCategory('App')}
+            style={[
+              styles.categoryCard,
+              selectedCategory === 'App' ? styles.categoryCardSelected : { backgroundColor: cardBackground, borderColor },
+            ]}>
+            <ThemedText
+              lightColor={selectedCategory === 'App' ? '#fff' : undefined}
+              darkColor={selectedCategory === 'App' ? '#fff' : undefined}
+              style={styles.categoryEmoji}>
+              📱
+            </ThemedText>
+            <ThemedText
+              lightColor={selectedCategory === 'App' ? '#fff' : undefined}
+              darkColor={selectedCategory === 'App' ? '#fff' : undefined}
+              style={selectedCategory === 'App' ? styles.categoryLabelSelected : styles.categoryLabel}>
+              App
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={() => setSelectedCategory('Content')}
+            style={[
+              styles.categoryCard,
+              selectedCategory === 'Content' ? styles.categoryCardSelected : { backgroundColor: cardBackground, borderColor },
+            ]}>
+            <ThemedText
+              lightColor={selectedCategory === 'Content' ? '#fff' : undefined}
+              darkColor={selectedCategory === 'Content' ? '#fff' : undefined}
+              style={styles.categoryEmoji}>
+              📝
+            </ThemedText>
+            <ThemedText
+              lightColor={selectedCategory === 'Content' ? '#fff' : undefined}
+              darkColor={selectedCategory === 'Content' ? '#fff' : undefined}
+              style={selectedCategory === 'Content' ? styles.categoryLabelSelected : styles.categoryLabel}>
+              Content
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={() => setSelectedCategory('Random')}
+            style={[
+              styles.categoryCard,
+              selectedCategory === 'Random' ? styles.categoryCardSelected : { backgroundColor: cardBackground, borderColor },
+            ]}>
+            <ThemedText
+              lightColor={selectedCategory === 'Random' ? '#fff' : undefined}
+              darkColor={selectedCategory === 'Random' ? '#fff' : undefined}
+              style={styles.categoryEmoji}>
+              🎲
+            </ThemedText>
+            <ThemedText
+              lightColor={selectedCategory === 'Random' ? '#fff' : undefined}
+              darkColor={selectedCategory === 'Random' ? '#fff' : undefined}
+              style={selectedCategory === 'Random' ? styles.categoryLabelSelected : styles.categoryLabel}>
+              Random
+            </ThemedText>
+          </Pressable>
+        </ThemedView>
+
+        {/* E) Outside card met toggle */}
+        <ThemedView style={[styles.card, styles.outsideCard, { backgroundColor: cardBackground, borderColor }]}>
+          <ThemedView style={styles.outsideIcon}>
+            <ThemedText style={styles.outsideIconEmoji}>🍃</ThemedText>
+          </ThemedView>
+          <ThemedView style={styles.outsideText} lightColor="#fff" darkColor="#1F1F1F">
+            <ThemedText style={styles.outsideTitle}>Outside</ThemedText>
+            <ThemedText style={styles.outsideSubtitle}>Fresh air vibes</ThemedText>
+          </ThemedView>
+          <Switch value={isOutside} onValueChange={setIsOutside} />
+        </ThemedView>
+
+        {/* F) Save button */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.saveButton,
+            !canSubmit && styles.saveButtonDisabled,
+            pressed && canSubmit && { opacity: 0.85 },
+          ]}
+          onPress={submitIdea}
+          disabled={!canSubmit}
+          accessibilityRole="button"
+          accessibilityLabel="Save idea">
+          <ThemedText style={[styles.saveButtonText, !canSubmit && styles.saveButtonTextDisabled]}>
+            💾 Save
+          </ThemedText>
+        </Pressable>
+      </ScrollView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    gap: 20,
+  },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  badge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#9333EA',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  badgeEmoji: {
+    fontSize: 18,
+  },
+  headerText: {
+    flex: 1,
+    gap: 4,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    opacity: 0.6,
+  },
+  card: {
+    borderRadius: 12,
+    borderWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  inputCard: {
+    padding: 16,
+    gap: 16,
+  },
+  textInput: {
+    minHeight: 120,
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  recordButton: {
+    backgroundColor: '#9333EA',
+    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  recordButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1,
+    opacity: 0.6,
+    textTransform: 'uppercase',
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  categoryCard: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 100,
+    justifyContent: 'center',
+  },
+  categoryCardSelected: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  categoryEmoji: {
+    fontSize: 24,
+  },
+  categoryEmojiSelected: {
+    fontSize: 24,
+  },
+  categoryLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  categoryLabelSelected: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#fff',
+  },
+  outsideCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+  },
+  outsideIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  outsideIconEmoji: {
+    fontSize: 20,
+  },
+  outsideText: {
+    flex: 1,
+    gap: 2,
+  },
+  outsideTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  outsideSubtitle: {
+    fontSize: 13,
+    opacity: 0.6,
+  },
+  saveButton: {
+    backgroundColor: '#9333EA',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 50,
+  },
+  saveButtonDisabled: {
+    opacity: 0.5,
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  saveButtonTextDisabled: {
+    opacity: 0.7,
   },
 });
