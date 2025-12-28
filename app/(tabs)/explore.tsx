@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { FlatList, Keyboard, Modal, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { Dimensions, FlatList, Keyboard, Modal, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -21,10 +21,77 @@ function formatIdeaDate(ts: number): string {
   }
 }
 
+type AnchorRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+function measureDropdown(
+  ref: React.RefObject<View | null>,
+  callback: (rect: AnchorRect) => void
+) {
+  ref.current?.measureInWindow((x, y, width, height) => {
+    callback({ x, y, width, height });
+  });
+}
+
+function calculateMenuPosition(
+  anchorRect: AnchorRect,
+  menuWidth: number,
+  menuHeight: number,
+  offset: number = 8
+): { top: number; left: number } {
+  const { width: windowWidth, height: windowHeight } = Dimensions.get('window');
+  const padding = 16;
+
+  // Start met positionering onder de anchor
+  let top = anchorRect.y + anchorRect.height + offset;
+  let left = anchorRect.x;
+
+  // Clamp horizontaal: zorg dat menu volledig binnen scherm blijft
+  left = Math.max(padding, Math.min(left, windowWidth - menuWidth - padding));
+
+  // Als menu rechts buiten scherm valt, clamp naar rechts edge
+  if (left + menuWidth > windowWidth - padding) {
+    left = windowWidth - menuWidth - padding;
+  }
+
+  // Als menu links buiten scherm valt, clamp naar links edge
+  if (left < padding) {
+    left = padding;
+  }
+
+  // Als menu onderkant buiten scherm valt, positioneer boven
+  if (top + menuHeight > windowHeight - padding) {
+    top = anchorRect.y - menuHeight - offset;
+    // Als ook boven niet past, clamp naar onderkant scherm
+    if (top < padding) {
+      top = windowHeight - menuHeight - padding;
+      // Als menu nog steeds te hoog is, clamp naar bovenkant
+      if (top < padding) {
+        top = padding;
+      }
+    }
+  }
+
+  // Als menu bovenkant buiten scherm valt, clamp naar bovenkant
+  if (top < padding) {
+    top = padding;
+  }
+
+  return { top, left };
+}
+
 export default function TabTwoScreen() {
   const { ideas, removeIdea, togglePinned, toggleArchived } = useIdeas();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+
+  // Dropdown refs
+  const categoryDropdownRef = useRef<View>(null);
+  const sortDropdownRef = useRef<View>(null);
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -33,6 +100,8 @@ export default function TabTwoScreen() {
   const [showArchived, setShowArchived] = useState(false);
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const [categoryAnchorRect, setCategoryAnchorRect] = useState<AnchorRect | null>(null);
+  const [sortAnchorRect, setSortAnchorRect] = useState<AnchorRect | null>(null);
 
   // Theme colors
   const borderColor = useThemeColor({ light: '#E0E0E0', dark: '#404040' }, 'icon');
@@ -41,6 +110,7 @@ export default function TabTwoScreen() {
   const pillBackground = useThemeColor({ light: '#F3F4F6', dark: '#2A2A2A' }, 'background');
   const inputTextColor = useThemeColor({ light: '#11181C', dark: '#ECEDEE' }, 'text');
   const placeholderColor = useThemeColor({ light: '#687076', dark: '#9BA1A6' }, 'icon');
+  const dropdownTextColor = useThemeColor({}, 'text');
 
   // Derived: Filter and sort ideas
   const visibleIdeas = useMemo(() => {
@@ -237,60 +307,116 @@ export default function TabTwoScreen() {
       {/* Controls row: Category + Sort dropdowns */}
       <ThemedView style={styles.controlsRow}>
         {/* Category dropdown */}
-        <Pressable
-          style={({ pressed }) => [
-            styles.dropdownBox,
-            { backgroundColor: cardBackground, borderColor },
-            pressed && { opacity: 0.9 },
-          ]}
-          onPress={() => {
-            Keyboard.dismiss();
-            setIsCategoryMenuOpen(true);
-            setIsSortMenuOpen(false);
-          }}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Category filter"
-          accessibilityHint="Opens a menu">
-          <ThemedText style={[styles.dropdownLabel, { color: inputTextColor }]}>
-            {selectedCategory === 'All'
-              ? 'All'
-              : selectedCategory === 'App'
-                ? '📱 App'
-                : selectedCategory === 'Content'
-                  ? '📝 Content'
-                  : '🎲 Random'}
-          </ThemedText>
-          <ThemedText style={[styles.dropdownChevron, { color: mutedText }]}>▾</ThemedText>
-        </Pressable>
+        <View ref={categoryDropdownRef} style={{ flex: 1, minHeight: 44 }} collapsable={false}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.dropdownBox,
+              selectedCategory !== 'All' && styles.dropdownBoxSelected,
+              selectedCategory === 'All' && { backgroundColor: cardBackground, borderColor },
+              pressed && { opacity: 0.9 },
+            ]}
+            onPress={() => {
+              Keyboard.dismiss();
+              setIsSortMenuOpen(false);
+              setCategoryAnchorRect(null); // Reset voor fallback
+              measureDropdown(categoryDropdownRef, (rect) => {
+                setCategoryAnchorRect(rect);
+              });
+              setIsCategoryMenuOpen(true);
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Category filter"
+            accessibilityHint="Opens a menu">
+            <ThemedText
+              style={[
+                styles.dropdownLabel,
+                selectedCategory !== 'All' ? styles.dropdownLabelSelected : { color: dropdownTextColor },
+              ]}
+              numberOfLines={1}
+              ellipsizeMode="tail">
+              {selectedCategory === 'All'
+                ? 'All'
+                : selectedCategory === 'App'
+                  ? '📱 App'
+                  : selectedCategory === 'Content'
+                    ? '📝 Content'
+                    : '🎲 Random'}
+            </ThemedText>
+            <ThemedText
+              style={[
+                styles.dropdownChevron,
+                selectedCategory !== 'All' ? styles.dropdownChevronSelected : { color: mutedText },
+              ]}
+              numberOfLines={1}>
+              ▾
+            </ThemedText>
+          </Pressable>
+        </View>
 
         {/* Sort dropdown */}
-        <Pressable
-          style={({ pressed }) => [
-            styles.dropdownBox,
-            { backgroundColor: cardBackground, borderColor },
-            pressed && { opacity: 0.9 },
-          ]}
-          onPress={() => {
-            Keyboard.dismiss();
-            setIsSortMenuOpen(true);
-            setIsCategoryMenuOpen(false);
-          }}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Sort order"
-          accessibilityHint="Opens a menu">
-          <ThemedText style={[styles.dropdownLabel, { color: inputTextColor }]}>
-            {sortOrder === 'newest' ? 'Newest ↓' : 'Oldest ↑'}
-          </ThemedText>
-          <ThemedText style={[styles.dropdownChevron, { color: mutedText }]}>▾</ThemedText>
-        </Pressable>
+        <View ref={sortDropdownRef} style={{ flex: 1, minHeight: 44 }} collapsable={false}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.dropdownBox,
+              sortOrder !== 'newest' && styles.dropdownBoxSelected,
+              sortOrder === 'newest' && { backgroundColor: cardBackground, borderColor },
+              pressed && { opacity: 0.9 },
+            ]}
+            onPress={() => {
+              Keyboard.dismiss();
+              setIsCategoryMenuOpen(false);
+              setSortAnchorRect(null); // Reset voor fallback
+              measureDropdown(sortDropdownRef, (rect) => {
+                setSortAnchorRect(rect);
+              });
+              setIsSortMenuOpen(true);
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Sort order"
+            accessibilityHint="Opens a menu">
+            <ThemedText
+              style={[
+                styles.dropdownLabel,
+                sortOrder !== 'newest' ? styles.dropdownLabelSelected : { color: dropdownTextColor },
+              ]}
+              numberOfLines={1}
+              ellipsizeMode="tail">
+              {sortOrder === 'newest' ? 'Newest ↓' : 'Oldest ↑'}
+            </ThemedText>
+            <ThemedText
+              style={[
+                styles.dropdownChevron,
+                sortOrder !== 'newest' ? styles.dropdownChevronSelected : { color: mutedText },
+              ]}
+              numberOfLines={1}>
+              ▾
+            </ThemedText>
+          </Pressable>
+        </View>
       </ThemedView>
 
       {/* Category Modal */}
       <Modal visible={isCategoryMenuOpen} transparent animationType="fade" onRequestClose={() => setIsCategoryMenuOpen(false)}>
         <Pressable style={styles.menuBackdrop} onPress={() => setIsCategoryMenuOpen(false)}>
-          <View style={styles.menuCardContainer}>
+          <View
+            style={[
+              {
+                position: 'absolute',
+                width: Math.min(300, Dimensions.get('window').width - 32),
+              },
+              categoryAnchorRect
+                ? calculateMenuPosition(categoryAnchorRect, Math.min(300, Dimensions.get('window').width - 32), 220)
+                : (() => {
+                    const { width: windowWidth, height: windowHeight } = Dimensions.get('window');
+                    const menuWidth = Math.min(300, windowWidth - 32);
+                    return {
+                      top: windowHeight / 2 - 110,
+                      left: windowWidth / 2 - menuWidth / 2,
+                    };
+                  })(),
+            ]}>
             <ThemedView style={[styles.menuCard, { backgroundColor: cardBackground, borderColor }]}>
               <Pressable
                 style={({ pressed }) => [
@@ -368,7 +494,23 @@ export default function TabTwoScreen() {
       {/* Sort Modal */}
       <Modal visible={isSortMenuOpen} transparent animationType="fade" onRequestClose={() => setIsSortMenuOpen(false)}>
         <Pressable style={styles.menuBackdrop} onPress={() => setIsSortMenuOpen(false)}>
-          <View style={styles.menuCardContainer}>
+          <View
+            style={[
+              {
+                position: 'absolute',
+                width: Math.min(300, Dimensions.get('window').width - 32),
+              },
+              sortAnchorRect
+                ? calculateMenuPosition(sortAnchorRect, Math.min(300, Dimensions.get('window').width - 32), 140)
+                : (() => {
+                    const { width: windowWidth, height: windowHeight } = Dimensions.get('window');
+                    const menuWidth = Math.min(300, windowWidth - 32);
+                    return {
+                      top: windowHeight / 2 - 70,
+                      left: windowWidth / 2 - menuWidth / 2,
+                    };
+                  })(),
+            ]}>
             <ThemedView style={[styles.menuCard, { backgroundColor: cardBackground, borderColor }]}>
               <Pressable
                 style={({ pressed }) => [
@@ -678,28 +820,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
+    minHeight: 44,
     borderRadius: 12,
     borderWidth: 1,
     gap: 8,
   },
+  dropdownBoxSelected: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
   dropdownLabel: {
     fontSize: 14,
     fontWeight: '500',
+    lineHeight: 20,
     flex: 1,
+  },
+  dropdownLabelSelected: {
+    color: '#fff',
   },
   dropdownChevron: {
     fontSize: 12,
+    lineHeight: 20,
+    minWidth: 16,
+    flexShrink: 0,
+  },
+  dropdownChevronSelected: {
+    color: '#fff',
   },
   menuBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  menuCardContainer: {
-    width: '80%',
-    maxWidth: 300,
   },
   menuCard: {
     borderRadius: 12,
