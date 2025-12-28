@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Keyboard, Pressable, ScrollView, StyleSheet, Switch, TextInput, Platform } from 'react-native';
+import { Alert, Keyboard, Pressable, ScrollView, StyleSheet, TextInput, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -12,7 +12,6 @@ type Category = 'App' | 'Content' | 'Random';
 export default function HomeScreen() {
   const [ideaText, setIdeaText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category>('Random');
-  const [isOutside, setIsOutside] = useState(false);
   const { addIdea } = useIdeas();
   const insets = useSafeAreaInsets();
 
@@ -23,10 +22,9 @@ export default function HomeScreen() {
       return;
     }
     const text = ideaText.trim();
-    addIdea({ text, category: selectedCategory, isOutside });
+    addIdea({ text, category: selectedCategory });
     setIdeaText('');
     setSelectedCategory('Random');
-    setIsOutside(false);
     Keyboard.dismiss();
   };
 
@@ -133,19 +131,7 @@ export default function HomeScreen() {
           </Pressable>
         </ThemedView>
 
-        {/* E) Outside card met toggle */}
-        <ThemedView style={[styles.card, styles.outsideCard, { backgroundColor: cardBackground, borderColor }]}>
-          <ThemedView style={styles.outsideIcon}>
-            <ThemedText style={styles.outsideIconEmoji}>🍃</ThemedText>
-          </ThemedView>
-          <ThemedView style={styles.outsideText} lightColor="#fff" darkColor="#1F1F1F">
-            <ThemedText style={styles.outsideTitle}>Outside</ThemedText>
-            <ThemedText style={styles.outsideSubtitle}>Fresh air vibes</ThemedText>
-          </ThemedView>
-          <Switch value={isOutside} onValueChange={setIsOutside} />
-        </ThemedView>
-
-        {/* F) Save button */}
+        {/* E) Save button */}
         <Pressable
           style={({ pressed }) => [
             styles.saveButton,
@@ -269,9 +255,6 @@ const styles = StyleSheet.create({
   categoryEmoji: {
     fontSize: 24,
   },
-  categoryEmojiSelected: {
-    fontSize: 24,
-  },
   categoryLabel: {
     fontSize: 14,
     fontWeight: '500',
@@ -280,35 +263,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#fff',
-  },
-  outsideCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    gap: 12,
-  },
-  outsideIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#10B981',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  outsideIconEmoji: {
-    fontSize: 20,
-  },
-  outsideText: {
-    flex: 1,
-    gap: 2,
-  },
-  outsideTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  outsideSubtitle: {
-    fontSize: 13,
-    opacity: 0.6,
   },
   saveButton: {
     backgroundColor: '#9333EA',
